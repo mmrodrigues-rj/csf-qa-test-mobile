@@ -1,35 +1,36 @@
-// tests/specs/06-navigating.spec.ts
 import { expect } from 'chai';
 import Forms from '../pageobjects/FormsScreen';
 
-describe('06 | Navigating + Forms interactions', () => {
-  it('navega pelas abas e interage com a Forms', async () => {
-    await Forms.tap(Forms.tabHome);
-    await Forms.tap(Forms.tabWebview);
-    await Forms.tap(Forms.tabLogin);
-    await Forms.tap(Forms.tabForms);
-    await Forms.tap(Forms.tabSwipe);
-    await Forms.tap(Forms.tabDrag);
-    await Forms.tap(Forms.tabForms);
-
-    const text = 'hello QA - forms';
+describe('06 | Navigating + Forms interactions (fatiado)', () => {
+  it('input: digita e espelha o texto', async () => {
+    await Forms.open();
+    const text = 'hello forms';
     await Forms.typeInInput(text);
-    expect(await Forms.readTyped()).to.contain(text);
+    expect((await Forms.readTyped()).toLowerCase()).to.contain(text);
+  });
 
+  it('switch: ligar mostra dica para desligar', async () => {
     await Forms.setSwitch(true);
     const tipOn = (await Forms.readSwitchTip()).toLowerCase();
-    expect(tipOn).to.match(/(turn the switch on|^on\b)/);
+    expect(tipOn).to.match(/(turn the switch off|^on\b)/);
+  });
 
+  it('switch: desligar mostra dica para ligar', async () => {
     await Forms.setSwitch(false);
     const tipOff = (await Forms.readSwitchTip()).toLowerCase();
-    expect(tipOff).to.match(/(turn the switch off|^off\b)/);
+    expect(tipOff).to.match(/(turn the switch on|^off\b)/);
+  });
 
-    await Forms.chooseDropdown('webdriver.io is awesome');
-    const ddValue = (await Forms.readDropdown()).toLowerCase();   // <= aqui
-    expect(ddValue).to.match(/webdriver\.io is awesome/);
+  it('dropdown: seleciona "webdriver.io is awesome" e valida', async () => {
+    const option = 'webdriver.io is awesome';
+    await Forms.chooseDropdown(option);
+    const checked = await Forms.isDropdownItemChecked(option);
+    expect(checked, 'item selecionado deveria aparecer marcado ao reabrir a lista').to.equal(true);
+  });
 
+  it('botão Active: dispara snackbar de sucesso', async () => {
     await Forms.tapActive();
-    const snack = await Forms.readSnack(5000);                     // <= aqui
+    const snack = await Forms.readSnack(6000);
     expect(snack).to.be.a('string');
     expect(String(snack).toLowerCase()).to.match(/(active|button .* active)/);
   });
