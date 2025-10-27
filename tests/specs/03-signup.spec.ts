@@ -39,4 +39,3 @@ describe('Sign up | Sucesso', () => {
     expect(/success|signed up|logged in/i.test(String(snack)), `Snackbar inesperado: "${snack}"`).to.equal(true);
   });
 });
-

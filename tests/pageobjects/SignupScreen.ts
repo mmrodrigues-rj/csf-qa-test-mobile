@@ -83,7 +83,7 @@ class SignupScreen extends BaseScreen {
           const el = await this.el(s);
           await (el as any).waitForDisplayed({ timeout: timeoutPerTry });
           return s;
-        } catch { /* tenta o próximo */ }
+        } catch {}
       }
       await this.tinySwipe(1);
     }
@@ -121,7 +121,7 @@ class SignupScreen extends BaseScreen {
         } catch {}
       }
       if (ok) break;
-      await this.tinySwipe(1); // varre um pouco pra cima
+      await this.tinySwipe(1);
     }
 
     if (!ok) {
@@ -153,7 +153,7 @@ class SignupScreen extends BaseScreen {
     if (data.repeat !== undefined)   { await ensure(repeatSel); await this.type(repeatSel, String(data.repeat ?? '')); }
 
     if (typeof data.acceptTerms === 'boolean') {
-      // NOVO: tenta vários seletores e rola até achar
+      // tenta vários seletores e rola até achar
       const termsSel = await this.ensureVisibleAny([this.chkTermsA11y, this.chkTermsId], 3, 1200);
       if (termsSel) {
         const el = await this.el(termsSel);
@@ -162,7 +162,6 @@ class SignupScreen extends BaseScreen {
         if (data.acceptTerms !== isOn) await (el as any).click();
       } else {
         console.log('⚠️ Switch de termos não encontrado; prosseguindo sem marcar');
-        // Se preferir falhar: throw new Error('Switch de termos não encontrado');
       }
     }
   }
@@ -195,6 +194,48 @@ class SignupScreen extends BaseScreen {
       await browser.pause(200);
     }
     return null;
+  }
+
+  /** Novo: detecta presença de mensagens/indicadores de erro de validação. */
+  async anyErrorVisible(): Promise<boolean> {
+    if (await this.isVisible(this.lblError)) return true;
+
+    if (await this.isVisible(this.lblSnack)) {
+      try {
+        const el = await this.el(this.lblSnack);
+        const txt = String(await (el as any).getText() ?? '').toLowerCase();
+        if (txt && /error|invalid|senha|email|required|preencha|mismatch/.test(txt)) return true;
+      } catch {}
+    }
+
+    if (await this.isVisible(this.lblDialogMsg)) {
+      try {
+        const el = await this.el(this.lblDialogMsg);
+        const txt = String(await (el as any).getText() ?? '').toLowerCase();
+        if (txt && /error|invalid|senha|email|required|preencha|mismatch/.test(txt)) return true;
+      } catch {}
+    }
+
+    return false;
+  }
+
+  /** Novo: verifica se o formulário de Sign up ainda está na tela. */
+  async formExists(): Promise<boolean> {
+    const parts = [
+      this.fldEmailA11y, this.fldEmailId,
+      this.fldPassA11y,  this.fldPassId,
+      this.fldRepeatA11y,this.fldRepeatId,
+      this.chkTermsA11y, this.chkTermsId,
+      this.btnSignUpA11y,this.btnSignUpId, this.btnSignUpIdAlt
+    ];
+
+    for (const s of parts) {
+      try {
+        const el = await this.el(s);
+        if (await (el as any).isDisplayed()) return true;
+      } catch {}
+    }
+    return false;
   }
 
   async successVisible() {
