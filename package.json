@@ -4,9 +4,11 @@
   "description": "",
   "main": "index.js",
   "scripts": {
+    
     "typecheck": "tsc -p . --noEmit",
+    "test:android:chrome": "cross-env PLATFORM=android wdio run ./wdio.conf.ts",
     "wdio": "wdio run ./wdio.conf.ts",
-    "test:android": "cross-env PLATFORM=android wdio run ./wdio.conf.ts",
+    "test:android": "cross-env PLATFORM=android wdio run ./wdio.conf.ts --tsConfigPath=./tsconfig.json",
     "test:ios": "cross-env PLATFORM=ios wdio run ./wdio.conf.ts",
     "appium": "appium",
     "allure:generate": "allure generate --clean allure-results",
