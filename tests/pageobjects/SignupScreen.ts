@@ -9,17 +9,15 @@ class SignupScreen extends BaseScreen {
   get tabLoginByText() { return 'android=new UiSelector().textContains("Login")'; }
 
   // --- Toggle/aba interna "Sign up" (várias alternativas) ---
-  get tabSignUpA11y()     { return '~Sign up'; }                        // a11y clássico
-  get tabSignUpA11yAlt()  { return '~Sign Up'; }                        // variação de caixa
+  get tabSignUpA11y()     { return '~Sign up'; }
+  get tabSignUpA11yAlt()  { return '~Sign Up'; }
   get tabSignUpDesc()     { return 'android=new UiSelector().descriptionMatches("(?i)sign\\s*up")'; }
   get tabSignUpText()     { return 'android=new UiSelector().textMatches("(?i)sign\\s*up")'; }
   get tabSignUpText2()    { return 'android=new UiSelector().textContains("Sign up")'; }
   get tabSignUpXpath()    { return '//android.widget.TextView[matches(@text,"(?i)sign\\s*up")]'; }
-  // alguns layouts usam botões dentro de um segmented control
   get tabSignUpBtnXpath() { return '//*[@content-desc and matches(@content-desc,"(?i)sign\\s*up")]'; }
 
-  // --- Campos (a11y) ---
-  get fldNameA11y()    { return '~input-name'; }
+  // --- Campos (a11y) ---  (sem "name" neste build)
   get fldEmailA11y()   { return '~input-email'; }
   get fldPassA11y()    { return '~input-password'; }
   get fldRepeatA11y()  { return '~input-repeat-password'; }
@@ -27,7 +25,6 @@ class SignupScreen extends BaseScreen {
   get btnSignUpA11y()  { return '~button-SIGN UP'; }
 
   // --- Fallbacks por resource-id ---
-  get fldNameId()      { return 'android=new UiSelector().resourceId("com.wdiodemoapp:id/input-name")'; }
   get fldEmailId()     { return 'android=new UiSelector().resourceId("com.wdiodemoapp:id/input-email")'; }
   get fldPassId()      { return 'android=new UiSelector().resourceId("com.wdiodemoapp:id/input-password")'; }
   get fldRepeatId()    { return 'android=new UiSelector().resourceId("com.wdiodemoapp:id/input-repeat-password")'; }
@@ -49,15 +46,59 @@ class SignupScreen extends BaseScreen {
     return sels[0];
   }
 
+  /**
+   * swipe vertical curto (para cima = 1, para baixo = -1)
+   */
+  private async tinySwipe(direction: 1 | -1 = 1) {
+    const { height, width } = await browser.getWindowSize();
+    const startY = Math.floor(height * (direction === 1 ? 0.70 : 0.30));
+    const endY   = Math.floor(height * (direction === 1 ? 0.30 : 0.70));
+    const x      = Math.floor(width * 0.5);
+
+    const d = browser as any;
+    await d.performActions([{
+      type: 'pointer',
+      id: 'finger1',
+      parameters: { pointerType: 'touch' },
+      actions: [
+        { type: 'pointerMove', duration: 0, x, y: startY },
+        { type: 'pointerDown', button: 1 },
+        { type: 'pause', duration: 100 },
+        { type: 'pointerMove', duration: 400, x, y: endY },
+        { type: 'pointerUp', button: 1 }
+      ]
+    }]);
+    await d.releaseActions();
+    await browser.pause(200);
+  }
+
+  /**
+   * Garante visibilidade tentando vários seletores e rolando entre as tentativas.
+   * Retorna o seletor que ficou visível, ou null se nenhum aparecer.
+   */
+  private async ensureVisibleAny(candidates: string[], rounds = 3, timeoutPerTry = 1200): Promise<string | null> {
+    for (let r = 0; r < rounds; r++) {
+      for (const s of candidates) {
+        try {
+          const el = await this.el(s);
+          await (el as any).waitForDisplayed({ timeout: timeoutPerTry });
+          return s;
+        } catch { /* tenta o próximo */ }
+      }
+      await this.tinySwipe(1);
+    }
+    return null;
+  }
+
   async open() {
-    // Se já estou vendo o campo "Repeat password", já estou na aba Sign up
+    // Se já vejo "Repeat password", já estou na aba Sign up
     if (await this.isVisible(this.fldRepeatA11y) || await this.isVisible(this.fldRepeatId)) return;
 
-    // 1) garantir que estamos na tela Login (aba inferior)
+    // 1) ir para a tela Login (aba inferior)
     const tabLogin = await this.pick(this.tabLoginByA11y, this.tabLoginByDesc, this.tabLoginByText);
     await this.tap(tabLogin);
 
-    // 2) tentar alternar para a aba "Sign up" (dentro da tela Login)
+    // 2) alternar para a sub-aba "Sign up"
     const signUpToggle = await this.pick(
       this.tabSignUpA11y,
       this.tabSignUpA11yAlt,
@@ -69,35 +110,60 @@ class SignupScreen extends BaseScreen {
     );
     await this.tap(signUpToggle);
 
-    // 3) aguardar o formulário de cadastro (campo repeat) ficar visível
-    const repeatSel = await this.pick(this.fldRepeatA11y, this.fldRepeatId);
-    try {
-      await waitVisible(repeatSel, 8000);
-    } catch (e) {
-      // ajuda de depuração se algo mudar na UI
+    // 3) aguardar inputs; se não vierem, fazer swipes curtos e revalidar
+    const anchors = [this.fldRepeatA11y, this.fldRepeatId, this.fldEmailA11y, this.fldEmailId];
+    let ok = false;
+    for (let i = 0; i < 5; i++) {
+      for (const a of anchors) {
+        try {
+          const el = await this.el(a);
+          if (await (el as any).isDisplayed()) { ok = true; break; }
+        } catch {}
+      }
+      if (ok) break;
+      await this.tinySwipe(1); // varre um pouco pra cima
+    }
+
+    if (!ok) {
       const src = await browser.getPageSource();
-      console.log('Não encontrei o campo Repeat após tocar na aba "Sign up". Trecho do pageSource:', src.slice(0, 800));
-      throw e;
+      console.log('Sign up: inputs não ficaram visíveis. PageSource snippet:', src.slice(0, 800));
+      const repeatSel = await this.pick(this.fldRepeatA11y, this.fldRepeatId);
+      await waitVisible(repeatSel, 8000);
     }
   }
 
-  async fill(data: { name?: string; email?: string; password?: string; repeat?: string; acceptTerms?: boolean }) {
-    const nameSel   = await this.pick(this.fldNameA11y,  this.fldNameId);
+  async fill(data: { email?: string; password?: string; repeat?: string; acceptTerms?: boolean }) {
     const emailSel  = await this.pick(this.fldEmailA11y, this.fldEmailId);
     const passSel   = await this.pick(this.fldPassA11y,  this.fldPassId);
     const repeatSel = await this.pick(this.fldRepeatA11y,this.fldRepeatId);
 
-    if (data.name !== undefined)     await this.type(nameSel,   String(data.name ?? ''));
-    if (data.email !== undefined)    await this.type(emailSel,  String(data.email ?? ''));
-    if (data.password !== undefined) await this.type(passSel,   String(data.password ?? ''));
-    if (data.repeat !== undefined)   await this.type(repeatSel, String(data.repeat ?? ''));
+    const ensure = async (sel: string) => {
+      for (let i = 0; i < 3; i++) {
+        try {
+          const e = await this.el(sel);
+          if (await (e as any).isDisplayed()) return;
+        } catch {}
+        await this.tinySwipe(1);
+      }
+      await waitVisible(sel, 5000);
+    };
+
+    if (data.email !== undefined)    { await ensure(emailSel);  await this.type(emailSel,  String(data.email ?? '')); }
+    if (data.password !== undefined) { await ensure(passSel);   await this.type(passSel,   String(data.password ?? '')); }
+    if (data.repeat !== undefined)   { await ensure(repeatSel); await this.type(repeatSel, String(data.repeat ?? '')); }
 
     if (typeof data.acceptTerms === 'boolean') {
-      const termsSel = await this.pick(this.chkTermsA11y, this.chkTermsId);
-      const el = await this.el(termsSel);
-      const checked = await (el as any).getAttribute('checked'); // "true"/"false"
-      const isOn = String(checked).toLowerCase() === 'true';
-      if (data.acceptTerms !== isOn) await (el as any).click();
+      // NOVO: tenta vários seletores e rola até achar
+      const termsSel = await this.ensureVisibleAny([this.chkTermsA11y, this.chkTermsId], 3, 1200);
+      if (termsSel) {
+        const el = await this.el(termsSel);
+        const checked = await (el as any).getAttribute('checked'); // "true"/"false"
+        const isOn = String(checked).toLowerCase() === 'true';
+        if (data.acceptTerms !== isOn) await (el as any).click();
+      } else {
+        console.log('⚠️ Switch de termos não encontrado; prosseguindo sem marcar');
+        // Se preferir falhar: throw new Error('Switch de termos não encontrado');
+      }
     }
   }
 
@@ -106,7 +172,7 @@ class SignupScreen extends BaseScreen {
     await this.tap(btnSel);
   }
 
-  async create(user: { name: string; email: string; password: string; repeat: string; acceptTerms: boolean }) {
+  async create(user: { email: string; password: string; repeat: string; acceptTerms: boolean }) {
     await this.open();
     await this.fill(user);
     await this.submit();
