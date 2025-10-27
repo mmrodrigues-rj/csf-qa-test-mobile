@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "types": [
+      "node",
+      "mocha",
+      "@wdio/mocha-framework",
+      "@wdio/globals/types",
+      "webdriverio"
+    ],
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "outDir": ".wdio/build",
+    "rootDir": ".",
+    "skipLibCheck": true
+  },
+  "include": [
+    "wdio.conf.ts",
+    "global.d.ts",
+    "tests/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "reports",
+    ".wdio/build"
+  ]
+}

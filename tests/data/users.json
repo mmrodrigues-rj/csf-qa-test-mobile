@@ -1,0 +1,14 @@
+{
+  "invalid": {
+    "email_format": "abc",              
+    "short_password": "123"             
+  },
+  "blank": {
+    "email": "",
+    "password": ""
+  },
+  "valid": {
+    "username": "john@doe.com",
+    "password": "12345678"
+  }
+}

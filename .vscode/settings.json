@@ -1,0 +1,7 @@
+{
+  "typescript.tsdk": "./node_modules/typescript/lib",
+  "typescript.tsserver.excludeDirectories": [
+    "**/node_modules"
+  ],
+  "typescript.tsserver.experimental.enableProjectDiagnostics": false
+}
