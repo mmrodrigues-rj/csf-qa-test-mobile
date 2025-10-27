@@ -3,10 +3,20 @@ import BaseScreen from './BaseScreen';
 import { waitVisible } from '../helpers/waits';
 
 class SignupScreen extends BaseScreen {
-  // --- Navegação (aba inferior) ---
-  get tabSignUpA11y() { return '~Sign up'; }
-  get tabSignUpDesc() { return 'android=new UiSelector().descriptionContains("Sign")'; }
-  get tabSignUpText() { return 'android=new UiSelector().textContains("Sign")'; }
+  // --- Navegação (aba inferior) - mesma da LoginScreen ---
+  get tabLoginByA11y() { return '~Login'; }
+  get tabLoginByDesc() { return 'android=new UiSelector().descriptionContains("Login")'; }
+  get tabLoginByText() { return 'android=new UiSelector().textContains("Login")'; }
+
+  // --- Toggle/aba interna "Sign up" (várias alternativas) ---
+  get tabSignUpA11y()     { return '~Sign up'; }                        // a11y clássico
+  get tabSignUpA11yAlt()  { return '~Sign Up'; }                        // variação de caixa
+  get tabSignUpDesc()     { return 'android=new UiSelector().descriptionMatches("(?i)sign\\s*up")'; }
+  get tabSignUpText()     { return 'android=new UiSelector().textMatches("(?i)sign\\s*up")'; }
+  get tabSignUpText2()    { return 'android=new UiSelector().textContains("Sign up")'; }
+  get tabSignUpXpath()    { return '//android.widget.TextView[matches(@text,"(?i)sign\\s*up")]'; }
+  // alguns layouts usam botões dentro de um segmented control
+  get tabSignUpBtnXpath() { return '//*[@content-desc and matches(@content-desc,"(?i)sign\\s*up")]'; }
 
   // --- Campos (a11y) ---
   get fldNameA11y()    { return '~input-name'; }
@@ -16,7 +26,7 @@ class SignupScreen extends BaseScreen {
   get chkTermsA11y()   { return '~input-terms'; }
   get btnSignUpA11y()  { return '~button-SIGN UP'; }
 
-  // --- Fallbacks por resource-id (varia por build) ---
+  // --- Fallbacks por resource-id ---
   get fldNameId()      { return 'android=new UiSelector().resourceId("com.wdiodemoapp:id/input-name")'; }
   get fldEmailId()     { return 'android=new UiSelector().resourceId("com.wdiodemoapp:id/input-email")'; }
   get fldPassId()      { return 'android=new UiSelector().resourceId("com.wdiodemoapp:id/input-password")'; }
@@ -40,14 +50,35 @@ class SignupScreen extends BaseScreen {
   }
 
   async open() {
-    // já está no formulário de signup?
-    if (await this.isVisible(this.fldNameA11y) || await this.isVisible(this.fldNameId)) return;
+    // Se já estou vendo o campo "Repeat password", já estou na aba Sign up
+    if (await this.isVisible(this.fldRepeatA11y) || await this.isVisible(this.fldRepeatId)) return;
 
-    const tabSel = await this.pick(this.tabSignUpA11y, this.tabSignUpDesc, this.tabSignUpText);
-    await this.tap(tabSel);
+    // 1) garantir que estamos na tela Login (aba inferior)
+    const tabLogin = await this.pick(this.tabLoginByA11y, this.tabLoginByDesc, this.tabLoginByText);
+    await this.tap(tabLogin);
 
-    const nameSel = await this.pick(this.fldNameA11y, this.fldNameId);
-    await waitVisible(nameSel, 8000);
+    // 2) tentar alternar para a aba "Sign up" (dentro da tela Login)
+    const signUpToggle = await this.pick(
+      this.tabSignUpA11y,
+      this.tabSignUpA11yAlt,
+      this.tabSignUpDesc,
+      this.tabSignUpText,
+      this.tabSignUpText2,
+      this.tabSignUpXpath,
+      this.tabSignUpBtnXpath
+    );
+    await this.tap(signUpToggle);
+
+    // 3) aguardar o formulário de cadastro (campo repeat) ficar visível
+    const repeatSel = await this.pick(this.fldRepeatA11y, this.fldRepeatId);
+    try {
+      await waitVisible(repeatSel, 8000);
+    } catch (e) {
+      // ajuda de depuração se algo mudar na UI
+      const src = await browser.getPageSource();
+      console.log('Não encontrei o campo Repeat após tocar na aba "Sign up". Trecho do pageSource:', src.slice(0, 800));
+      throw e;
+    }
   }
 
   async fill(data: { name?: string; email?: string; password?: string; repeat?: string; acceptTerms?: boolean }) {
@@ -56,19 +87,17 @@ class SignupScreen extends BaseScreen {
     const passSel   = await this.pick(this.fldPassA11y,  this.fldPassId);
     const repeatSel = await this.pick(this.fldRepeatA11y,this.fldRepeatId);
 
-    if (data.name !== undefined)   await this.type(nameSel,   String(data.name ?? ''));
-    if (data.email !== undefined)  await this.type(emailSel,  String(data.email ?? ''));
-    if (data.password !== undefined) await this.type(passSel, String(data.password ?? ''));
-    if (data.repeat !== undefined)   await this.type(repeatSel,String(data.repeat ?? ''));
+    if (data.name !== undefined)     await this.type(nameSel,   String(data.name ?? ''));
+    if (data.email !== undefined)    await this.type(emailSel,  String(data.email ?? ''));
+    if (data.password !== undefined) await this.type(passSel,   String(data.password ?? ''));
+    if (data.repeat !== undefined)   await this.type(repeatSel, String(data.repeat ?? ''));
 
     if (typeof data.acceptTerms === 'boolean') {
       const termsSel = await this.pick(this.chkTermsA11y, this.chkTermsId);
       const el = await this.el(termsSel);
-      const checked = await (el as any).getAttribute('checked'); // "true"/"false" em switches
+      const checked = await (el as any).getAttribute('checked'); // "true"/"false"
       const isOn = String(checked).toLowerCase() === 'true';
-      if (data.acceptTerms !== isOn) {
-        await (el as any).click();
-      }
+      if (data.acceptTerms !== isOn) await (el as any).click();
     }
   }
 
@@ -104,8 +133,7 @@ class SignupScreen extends BaseScreen {
 
   async successVisible() {
     const txt = await this.readSnackText(3000);
-    if (txt && /successfully signed up/i.test(txt)) return true;
-
+    if (txt && /success|signed up|account/i.test(txt)) return true;
     return (await this.isVisible(this.lblSuccessText))
         || (await this.isVisible(this.lblSnack))
         || (await this.isVisible(this.lblDialogMsg));
