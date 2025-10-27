@@ -1,9 +1,10 @@
-import type { Options } from '@wdio/types';
+import * as fs from 'fs';
 import * as path from 'path';
+import { browser } from '@wdio/globals';
 
 const PLATFORM = (process.env.PLATFORM || 'android').toLowerCase(); // android | ios
 const ANDROID_APP = process.env.ANDROID_APP || path.resolve(__dirname, 'apps', 'android', 'app-debug.apk');
-const IOS_APP     = process.env.IOS_APP     || path.resolve(__dirname, 'apps', 'ios', 'MyApp.app'); // ou .ipa se usar real device
+const IOS_APP     = process.env.IOS_APP     || path.resolve(__dirname, 'apps', 'ios', 'MyApp.app'); // .app (simulador) ou .ipa (device)
 
 function androidCaps() {
   return [{
@@ -30,29 +31,32 @@ function iosCaps() {
   }];
 }
 
-export const config: Options.Testrunner = {
+export const config = {
   runner: 'local',
+
   specs: ['./tests/specs/**/*.ts'],
   exclude: [],
 
   maxInstances: 1,
 
+  // escolhe as caps pela variável PLATFORM
   capabilities: PLATFORM === 'ios' ? iosCaps() : androidCaps(),
 
   logLevel: 'info',
-
   bail: 0,
+
   baseUrl: 'http://localhost',
   waitforTimeout: 15000,
   connectionRetryTimeout: 120000,
   connectionRetryCount: 3,
 
-  // Appium server rodando local em 0.0.0.0:4723 (use "npx appium" em outro terminal)
+  // Appium local (suba com: npm run appium)
   hostname: process.env.APPIUM_HOST || '127.0.0.1',
   port: Number(process.env.APPIUM_PORT || 4723),
   path: process.env.APPIUM_PATH || '/',
 
   framework: 'mocha',
+
   reporters: [
     'spec',
     ['allure', {
@@ -77,10 +81,17 @@ export const config: Options.Testrunner = {
     }
   },
 
-  // Screenshot automático se um teste falhar
-  afterTest: async function (_test, _context, { passed }) {
+  // Screenshot manual quando um teste falhar (usando takeScreenshot)
+  afterTest: async function (test: any, _context: any, { passed }: { passed: boolean }) {
     if (!passed) {
-      await browser.takeScreenshot();
+      const pngBase64 = await (browser as any).takeScreenshot();
+      const outDir = path.resolve(__dirname, 'reports', 'screenshots');
+      if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
+      const safeName = String(test?.title || 'failed').replace(/[^\w.-]+/g, '_');
+      const file = path.join(outDir, `${safeName}.png`);
+      fs.writeFileSync(file, Buffer.from(pngBase64, 'base64'));
     }
   }
 };
+
+export default config;
