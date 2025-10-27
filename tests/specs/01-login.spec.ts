@@ -1,19 +1,16 @@
 import { expect } from 'chai';
-import LoginScreen from '../pageobjects/LoginScreen';
+import Login from '../pageobjects/LoginScreen';
 
-const users = require('../data/users.json');
+describe('Login | Sucesso', () => {
+  it('deve autenticar com sucesso (valida Snackbar)', async () => {
+    // O app de demo aceita qualquer e-mail válido + senha >= 8 chars
+    await Login.login('test@webdriver.io', 'Password123');
 
-describe('Login', () => {
-  it('deve recusar credenciais inválidas', async () => {
-    await LoginScreen.login(users.invalid.username, users.invalid.password);
-    const hasError = await LoginScreen.isVisible(LoginScreen.lblError);
-    const hasSnack = await LoginScreen.isVisible(LoginScreen.lblSnack);
-    expect(hasError || hasSnack).to.equal(true);
-  });
-
-  it('deve autenticar com sucesso', async () => {
-    await LoginScreen.login(users.valid.username, users.valid.password);
-    const ok = await LoginScreen.isVisible(LoginScreen.lblSuccess);
-    expect(ok).to.equal(true);
+    const snack = await Login.readSnackText(5000);
+    // Comentário: o objetivo aqui é validar o retorno do app ao autenticar,
+    // já que não há redirecionamento de tela. O texto pode variar por build,
+    // então usamos "logged in" de forma case-insensitive.
+    expect(snack, 'esperava mensagem de sucesso no Snackbar').to.be.a('string');
+    expect(/logged in/i.test(String(snack)), `Snackbar inesperado: "${snack}"`).to.equal(true);
   });
 });

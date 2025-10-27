@@ -1,4 +1,14 @@
 {
-  "valid": { "username": "user@example.com", "password": "MySecret123" },
-  "invalid": { "username": "user@example.com", "password": "wrong" }
+  "invalid": {
+    "email_format": "abc",              
+    "short_password": "123"             
+  },
+  "blank": {
+    "email": "",
+    "password": ""
+  },
+  "valid": {
+    "username": "john@doe.com",
+    "password": "12345678"
+  }
 }
