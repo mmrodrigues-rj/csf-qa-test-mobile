@@ -1,6 +1,15 @@
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
-  workflow_dispatch:
+- name: Install Appium
+  run: |
+    npm i -D appium@^3
+    npx appium -v
+
+- name: Ensure uiautomator2 driver (install only if missing)
+  shell: bash
+  run: |
+    set -e
+    if npx appium driver list --installed | grep -q "uiautomator2"; then
+      echo "uiautomator2 already installed"
+    else
+      npx appium driver install uiautomator2
+    fi
+
