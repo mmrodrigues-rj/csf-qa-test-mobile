@@ -1,4 +1,4 @@
-name: Android E2E
+name: android-e2e
 
 on:
   push:
@@ -15,36 +15,44 @@ env:
 
 jobs:
   android-e2e:
-    name: E2E on Android (Appium + Emulator)
-    runs-on: macos-13   # Intel: emulador mais estável/rápido
+    name: Android E2E
+    runs-on: macos-13
     timeout-minutes: 40
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
 
-      - name: Install dependencies
+      - name: Install deps
         run: npm ci
 
-      - name: Install Appium 3
-        run: |
-          npm i -D appium@^3 --no-audit --no-fund
-          npx appium -v
-
-      # Idempotente: não falha se já existir / força update se suportado
-      - name: Ensure uiautomator2 driver (idempotent)
+      # ★ Idempotente: nunca falha se o driver já existir
+      - name: Install Appium + Android driver
         shell: bash
         run: |
           set -euo pipefail
-          npx appium driver update uiautomator2 || true
-          npx appium driver install --force uiautomator2 || true
-          npx appium driver list --installed
+          npm i -D appium@^3 --no-audit --no-fund
+          npx appium -v
+
+          echo "== Listing installed drivers =="
+          npx appium driver list --installed || true
+
+          if npx appium driver list --installed | grep -Eq '^uiautomator2(\s|@)'; then
+            echo "uiautomator2 já instalado — tentando atualizar (não-fatal)"
+            npx appium driver update uiautomator2 || true
+          else
+            echo "uiautomator2 não encontrado — instalando"
+            npx appium driver install uiautomator2 || true
+          fi
+
+          echo "== Drivers instalados após step =="
+          npx appium driver list --installed || true
 
       - name: Setup Java 17
         uses: actions/setup-java@v4
@@ -55,7 +63,6 @@ jobs:
       - name: Run Android emulator and E2E tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          # ⚠️ API mais leve/rápida para CI
           api-level: 30
           target: default
           arch: x86_64
@@ -63,9 +70,7 @@ jobs:
           avd-name: e2e-avd
           force-avd-creation: true
           disable-animations: true
-          # Tempo maior de boot
           emulator-boot-timeout: 1500
-          # Headless + cold boot + otimizações
           emulator-options: >
             -no-window -no-snapshot -wipe-data -no-boot-anim -noaudio
             -camera-back none -camera-front none
@@ -73,10 +78,9 @@ jobs:
           script: |
             set -euo pipefail
 
-            echo "▶ Iniciando Appium…"
+            echo "▶ Start Appium"
             npx appium --base-path / --port "$APPIUM_PORT" --log-level warn & APPIUM_PID=$!
 
-            echo "▶ Aguardando Appium…"
             for i in {1..60}; do
               if curl -sf "http://127.0.0.1:${APPIUM_PORT}/status" | grep -q '"ready":true'; then
                 echo "Appium OK"; break
@@ -87,14 +91,11 @@ jobs:
               fi
             done
 
-            echo "▶ Executando testes E2E…"
             export PLATFORM=android
             export ANDROID_APP="$ANDROID_APP_PATH"
             npm run test:android || TEST_STATUS=$?
 
-            echo "▶ Encerrando Appium…"
             kill $APPIUM_PID || true
-
             exit ${TEST_STATUS:-0}
 
       - name: Upload artifacts (if present)
