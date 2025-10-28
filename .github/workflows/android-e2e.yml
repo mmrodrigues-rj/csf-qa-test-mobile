@@ -1,4 +1,4 @@
-name: android-e2e
+name: Android E2E
 
 on:
   push:
@@ -15,75 +15,78 @@ env:
 
 jobs:
   android-e2e:
-    name: Android E2E
-    runs-on: macos-13
+    name: E2E on Android (Appium + Emulator)
+    runs-on: macos-13        # <-- Intel (x86_64). Evita device offline em ARM64.
     timeout-minutes: 40
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: 'npm'
 
-      - name: Install deps
+      - name: Install dependencies
         run: npm ci
 
-      # ★ Idempotente: nunca falha se o driver já existir
-      - name: Install Appium + Android driver
-        shell: bash
+      # Appium 3 + uiautomator2 (idempotente)
+      - name: Install Appium 3
         run: |
-          set -euo pipefail
           npm i -D appium@^3 --no-audit --no-fund
           npx appium -v
 
-          echo "== Listing installed drivers =="
-          npx appium driver list --installed || true
-
-          if npx appium driver list --installed | grep -Eq '^uiautomator2(\s|@)'; then
-            echo "uiautomator2 já instalado — tentando atualizar (não-fatal)"
-            npx appium driver update uiautomator2 || true
+      - name: Ensure uiautomator2 driver (idempotent)
+        shell: bash
+        run: |
+          set -e
+          if npx appium driver list --installed | grep -E '^uiautomator2(\s|$)'; then
+            echo "uiautomator2 já instalado — ok"
           else
-            echo "uiautomator2 não encontrado — instalando"
-            npx appium driver install uiautomator2 || true
+            npx appium driver install uiautomator2
           fi
+          echo "=== Drivers instalados ==="
+          npx appium driver list --installed
 
-          echo "== Drivers instalados após step =="
-          npx appium driver list --installed || true
-
-      - name: Setup Java 17
+      - name: Setup Java for Android tooling
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
+          distribution: 'temurin'
           java-version: '17'
 
+      # Emulador + testes
       - name: Run Android emulator and E2E tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
-          target: default
-          arch: x86_64
-          profile: pixel_3
-          avd-name: e2e-avd
-          force-avd-creation: true
+          api-level: 34
+          target: google_apis
+          arch: x86_64                # casa com macos-13 (Intel)
+          profile: pixel_5
           disable-animations: true
-          emulator-boot-timeout: 1500
+          # Mais tolerante a boot: sem snapshot, sem boot anim, sem câmeras, GPU software
           emulator-options: >
-            -no-window -no-snapshot -wipe-data -no-boot-anim -noaudio
-            -camera-back none -camera-front none
-            -gpu auto -netfast -timezone UTC
+            -no-snapshot -no-boot-anim -camera-back none -camera-front none
+            -gpu swiftshader_indirect -memory 4096
+          # Aumenta janela de boot (padrão é 600s). Aqui 900s.
+          emulator-boot-timeout: 900
           script: |
             set -euo pipefail
 
-            echo "▶ Start Appium"
-            npx appium --base-path / --port "$APPIUM_PORT" --log-level warn & APPIUM_PID=$!
+            echo "▶ Verificando adb e aguardando device..."
+            adb start-server
+            # aguarda qualquer device aparecer
+            timeout 120 adb wait-for-device || true
 
+            echo "▶ Iniciando Appium em background…"
+            npx appium --base-path / --port $APPIUM_PORT --log-level warn & APPIUM_PID=$!
+
+            echo "▶ Aguardando Appium responder…"
             for i in {1..60}; do
-              if curl -sf "http://127.0.0.1:${APPIUM_PORT}/status" | grep -q '"ready":true'; then
-                echo "Appium OK"; break
+              if curl -s "http://127.0.0.1:${APPIUM_PORT}/status" | grep -q "\"ready\":true"; then
+                echo "Appium OK"
+                break
               fi
               sleep 2
               if [ $i -eq 60 ]; then
@@ -91,11 +94,32 @@ jobs:
               fi
             done
 
+            echo "▶ Aguardando boot completo do emulador…"
+            # polling robusto do sys.boot_completed
+            for i in {1..180}; do
+              BOOT_OK=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+              if [ "$BOOT_OK" = "1" ]; then
+                echo "Emulador pronto."
+                break
+              fi
+              echo "Aguardando boot ($i/180)…"
+              sleep 3
+              if [ $i -eq 180 ]; then
+                echo "Timeout aguardando boot do emulador."
+                kill $APPIUM_PID || true
+                exit 1
+              fi
+            done
+
+            echo "▶ Executando testes E2E (Android)…"
             export PLATFORM=android
             export ANDROID_APP="$ANDROID_APP_PATH"
+            # seu script npm que dispara o wdio
             npm run test:android || TEST_STATUS=$?
 
+            echo "▶ Encerrando Appium…"
             kill $APPIUM_PID || true
+
             exit ${TEST_STATUS:-0}
 
       - name: Upload artifacts (if present)
