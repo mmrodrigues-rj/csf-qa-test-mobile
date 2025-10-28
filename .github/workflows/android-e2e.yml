@@ -1,16 +1,113 @@
-- name: Install Appium 3
-  run: |
-    npm i -D appium@^3 --no-audit --no-fund
-    npx appium -v
+name: Android E2E
 
-- name: Ensure uiautomator2 driver (install or update)
-  shell: bash
-  run: |
-    set -e
-    if npx appium driver list --installed | grep -E '^uiautomator2(\s|$)'; then
-      echo "uiautomator2 já instalado — fazendo update"
-      npx appium driver update uiautomator2
-    else
-      echo "uiautomator2 não encontrado — instalando"
-      npx appium driver install uiautomator2
-    fi
+on:
+  push:
+    branches: [ main, ci-setup, feat/* ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+env:
+  # Caminho do APK dentro do repositório
+  ANDROID_APP_PATH: apps/android/native-demo-app.apk
+  # Porta padrão do Appium
+  APPIUM_PORT: 4723
+
+jobs:
+  android-e2e:
+    name: E2E on Android (Appium + Emulator)
+    runs-on: macos-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Checkout
+      uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Appium 3 + driver uiautomator2 (idempotente)
+      - name: Install Appium 3
+        run: |
+          npm i -D appium@^3 --no-audit --no-fund
+          npx appium -v
+
+      - name: Ensure uiautomator2 driver (install or update)
+        shell: bash
+        run: |
+          set -e
+          if npx appium driver list --installed | grep -E '^uiautomator2(\s|$)'; then
+            echo "uiautomator2 já instalado — atualizando"
+            npx appium driver update uiautomator2
+          else
+            echo "uiautomator2 não encontrado — instalando"
+            npx appium driver install uiautomator2
+          fi
+          echo "=== Drivers instalados ==="
+          npx appium driver list --installed
+
+      - name: Setup Java for Android tooling
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # Sobe emulador + executa tudo dentro dele
+      - name: Run Android emulator and E2E tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_5
+          disable-animations: true
+          emulator-options: "-no-snapshot -no-boot-anim -noaudio"
+          script: |
+            set -euo pipefail
+
+            echo "▶ Iniciando Appium em background…"
+            npx appium --base-path / --port $APPIUM_PORT --log-level warn & APPIUM_PID=$!
+
+            echo "▶ Aguardando Appium responder…"
+            for i in {1..60}; do
+              if curl -s "http://127.0.0.1:${APPIUM_PORT}/status" | grep -q "\"ready\":true"; then
+                echo "Appium OK"
+                break
+              fi
+              sleep 2
+              if [ $i -eq 60 ]; then
+                echo "Appium não iniciou a tempo"; kill $APPIUM_PID || true; exit 1
+              fi
+            done
+
+            echo "▶ Executando testes E2E (Android)…"
+            export PLATFORM=android
+            export ANDROID_APP="$ANDROID_APP_PATH"
+
+            # Seu script já existente no package.json
+            npm run test:android || TEST_STATUS=$?
+
+            echo "▶ Encerrando Appium…"
+            kill $APPIUM_PID || true
+
+            exit ${TEST_STATUS:-0}
+
+      # Artefatos úteis em caso de falha (logs, reports, screenshots, etc.)
+      - name: Upload artifacts (if present)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts-android
+          path: |
+            reports/**
+            logs/**
+            **/wdio-*.log
+          if-no-files-found: ignore
