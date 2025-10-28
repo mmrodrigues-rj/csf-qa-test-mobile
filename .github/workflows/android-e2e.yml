@@ -27,59 +27,40 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
 
-      # Appium 3
       - name: Install Appium 3
         run: |
           npm i -D appium@^3 --no-audit --no-fund
           npx appium -v
 
-      # uiautomator2: instala/atualiza sem falhar se já estiver ok
-            - name: Ensure uiautomator2 driver (install or install-if-missing)
+      # ====== FIX AQUI: step idempotente que não falha se já instalado ======
+      - name: Ensure uiautomator2 driver (idempotent)
         shell: bash
         run: |
           set -euo pipefail
 
-          echo "== Appium drivers (antes) =="
+          echo "== Drivers (antes) =="
           npx appium driver list --installed || true
 
           echo "== Tentando atualizar uiautomator2 =="
-          set +e
-          npx appium driver update uiautomator2
-          RC=$?
-          set -e
+          npx appium driver update uiautomator2 || true
 
-          if [ $RC -ne 0 ]; then
-            echo "Update falhou (provavelmente não instalado). Tentando instalar…"
-            set +e
-            OUT="$(npx appium driver install uiautomator2 2>&1)"
-            RC=$?
-            set -e
-            echo "$OUT"
-            if [ $RC -ne 0 ]; then
-              # Se o erro for "already installed", seguimos em frente
-              if echo "$OUT" | grep -qi "already installed"; then
-                echo "uiautomator2 já estava instalado — OK"
-              else
-                echo "Falha instalando uiautomator2"; exit $RC
-              fi
-            fi
-          else
-            echo "uiautomator2 atualizado (ou já estava na última versão) — OK"
-          fi
+          echo "== Garantindo instalação (reinstala se preciso) =="
+          # --force força reinstalação se necessário; '|| true' evita quebrar em 'already installed'
+          npx appium driver install --force uiautomator2 || true
 
-          echo "== Appium drivers (depois) =="
+          echo "== Drivers (depois) =="
           npx appium driver list --installed || true
-
+      # ======================================================================
 
       - name: Setup Java for Android tooling
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
       - name: Run Android emulator and E2E tests
@@ -94,14 +75,13 @@ jobs:
           script: |
             set -euo pipefail
 
-            echo "▶ Iniciando Appium em background…"
-            npx appium --base-path / --port $APPIUM_PORT --log-level warn & APPIUM_PID=$!
+            echo "▶ Iniciando Appium…"
+            npx appium --base-path / --port "$APPIUM_PORT" --log-level warn & APPIUM_PID=$!
 
             echo "▶ Aguardando Appium responder…"
             for i in {1..60}; do
-              if curl -s "http://127.0.0.1:${APPIUM_PORT}/status" | grep -q "\"ready\":true"; then
-                echo "Appium OK"
-                break
+              if curl -sf "http://127.0.0.1:${APPIUM_PORT}/status" | grep -q '"ready":true'; then
+                echo "Appium OK"; break
               fi
               sleep 2
               if [ $i -eq 60 ]; then
@@ -112,8 +92,6 @@ jobs:
             echo "▶ Executando testes E2E (Android)…"
             export PLATFORM=android
             export ANDROID_APP="$ANDROID_APP_PATH"
-
-            TEST_STATUS=0
             npm run test:android || TEST_STATUS=$?
 
             echo "▶ Encerrando Appium…"
