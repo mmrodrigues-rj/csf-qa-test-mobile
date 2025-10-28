@@ -42,16 +42,25 @@ jobs:
       - name: Ensure uiautomator2 driver (install or update)
         shell: bash
         run: |
-          set -e
-          if npx appium driver list --installed | grep -E '^uiautomator2(\s|$)'; then
-            echo "uiautomator2 já instalado — atualizando"
+          set -euo pipefail
+
+          echo "== Listing installed drivers (raw) =="
+          npx appium driver list --installed || true
+
+          echo "== Checking for uiautomator2 presence =="
+          # remove possíveis códigos ANSI e procure por uiautomator2 com ou sem @versão
+          if npx appium driver list --installed \
+              | sed 's/\x1b\[[0-9;]*m//g' \
+              | grep -Eq '^uiautomator2(@|\s|$)'; then
+            echo "uiautomator2 já instalado — tentando atualizar (não falha se não houver mudanças)"
             npx appium driver update uiautomator2 || echo "update sem mudanças (ok)"
           else
-            echo "uiautomator2 não encontrado — instalando"
-            npx appium driver install uiautomator2
+            echo "uiautomator2 não encontrado — instalando (idempotente)"
+            npx appium driver install uiautomator2 || echo "já estava instalado (ok)"
           fi
-          echo "=== Drivers instalados ==="
-          npx appium driver list --installed
+
+          echo "=== Drivers instalados (final) ==="
+          npx appium driver list --installed || true
 
       - name: Setup Java for Android tooling
         uses: actions/setup-java@v4
