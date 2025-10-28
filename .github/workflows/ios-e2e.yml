@@ -1,0 +1,75 @@
+name: iOS E2E
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ios-e2e-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  e2e-ios:
+    runs-on: macos-14
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      # Se você empacotar o app iOS como artifact em outro workflow, baixe-o aqui.
+      # - name: Download iOS build
+      #   uses: actions/download-artifact@v4
+      #   with:
+      #     name: ios-sim-app
+      #     path: ./apps
+
+      - name: Ensure Xcode tools
+        run: |
+          xcrun xcode-select -p
+          xcodebuild -version
+
+      - name: Boot iOS Simulator
+        run: |
+          SIM_NAME="iPhone 15"
+          RUNTIME=$(xcrun simctl list runtimes | awk -F '[()]' '/iOS 17/{print $2; exit}')
+          xcrun simctl create "E2E-Sim" "com.apple.CoreSimulator.SimDeviceType.$SIM_NAME" "com.apple.CoreSimulator.SimRuntime.$(echo $RUNTIME | tr ' ' '-')"
+          UDID=$(xcrun simctl list devices | awk '/E2E-Sim/{print $NF}' | tr -d '()')
+          echo "UDID=$UDID" >> $GITHUB_ENV
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+
+      - name: Start Appium (background)
+        run: npx appium --base-path /wd/hub --log appium.log &
+      
+      - name: Wait Appium
+        run: npx wait-on tcp:4723
+
+      - name: Run iOS E2E
+        env:
+          PLATFORM: ios
+          IOS_UDID: ${{ env.UDID }}
+          # Se o caminho do app for variável, injete via env:
+          # IOS_APP: "./apps/WdioDemoApp.app"
+        run: npm run test:ios:ci
+
+      - name: Archive reports (sempre)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-e2e-reports
+          path: |
+            ./reports/**
+            ./appium.log

@@ -59,7 +59,7 @@ export const config: WebdriverIO.Config = {
 
   maxInstances: 1,
 
-  // ===== AQUI ESTÁ A PROPRIEDADE QUE FALTAVA =====
+ 
   capabilities: PLATFORM === 'ios' ? iosCaps() : androidCaps(),
 
   logLevel: 'info',
