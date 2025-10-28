@@ -1,15 +1,16 @@
-- name: Install Appium
+- name: Install Appium 3
   run: |
-    npm i -D appium@^3
+    npm i -D appium@^3 --no-audit --no-fund
     npx appium -v
 
-- name: Ensure uiautomator2 driver (install only if missing)
+- name: Ensure uiautomator2 driver (install or update)
   shell: bash
   run: |
     set -e
-    if npx appium driver list --installed | grep -q "uiautomator2"; then
-      echo "uiautomator2 already installed"
+    if npx appium driver list --installed | grep -E '^uiautomator2(\s|$)'; then
+      echo "uiautomator2 já instalado — fazendo update"
+      npx appium driver update uiautomator2
     else
+      echo "uiautomator2 não encontrado — instalando"
       npx appium driver install uiautomator2
     fi
-
