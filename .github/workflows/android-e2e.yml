@@ -16,9 +16,8 @@ env:
 jobs:
   android-e2e:
     name: E2E on Android (Appium + Emulator)
-    # 👉 Intel runner (emulador muito mais estável/rápido)
-    runs-on: macos-13
-    timeout-minutes: 35
+    runs-on: macos-13   # Intel: emulador mais estável/rápido
+    timeout-minutes: 40
 
     steps:
       - name: Checkout
@@ -38,17 +37,16 @@ jobs:
           npm i -D appium@^3 --no-audit --no-fund
           npx appium -v
 
-      # Step idempotente: garante uiautomator2 sem quebrar se já existir
+      # Idempotente: não falha se já existir / força update se suportado
       - name: Ensure uiautomator2 driver (idempotent)
         shell: bash
         run: |
           set -euo pipefail
-          echo "== Drivers (antes) ==" && npx appium driver list --installed || true
           npx appium driver update uiautomator2 || true
           npx appium driver install --force uiautomator2 || true
-          echo "== Drivers (depois) ==" && npx appium driver list --installed || true
+          npx appium driver list --installed
 
-      - name: Setup Java for Android tooling
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -57,26 +55,28 @@ jobs:
       - name: Run Android emulator and E2E tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 34
-          target: google_apis
+          # ⚠️ API mais leve/rápida para CI
+          api-level: 30
+          target: default
           arch: x86_64
-          profile: pixel_5
+          profile: pixel_3
           avd-name: e2e-avd
           force-avd-creation: true
           disable-animations: true
-          # 👉 Cold boot, sem snapshot/áudio/câmeras; GPU host (Intel) e timeout maior
-          emulator-boot-timeout: 1200
+          # Tempo maior de boot
+          emulator-boot-timeout: 1500
+          # Headless + cold boot + otimizações
           emulator-options: >
-            -no-snapshot -wipe-data -no-boot-anim -noaudio
+            -no-window -no-snapshot -wipe-data -no-boot-anim -noaudio
             -camera-back none -camera-front none
-            -gpu host -netfast -timezone UTC
+            -gpu auto -netfast -timezone UTC
           script: |
             set -euo pipefail
 
-            echo "▶ Iniciando Appium em background…"
+            echo "▶ Iniciando Appium…"
             npx appium --base-path / --port "$APPIUM_PORT" --log-level warn & APPIUM_PID=$!
 
-            echo "▶ Aguardando Appium responder…"
+            echo "▶ Aguardando Appium…"
             for i in {1..60}; do
               if curl -sf "http://127.0.0.1:${APPIUM_PORT}/status" | grep -q '"ready":true'; then
                 echo "Appium OK"; break
@@ -87,7 +87,7 @@ jobs:
               fi
             done
 
-            echo "▶ Executando testes E2E (Android)…"
+            echo "▶ Executando testes E2E…"
             export PLATFORM=android
             export ANDROID_APP="$ANDROID_APP_PATH"
             npm run test:android || TEST_STATUS=$?
