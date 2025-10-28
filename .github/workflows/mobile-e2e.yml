@@ -2,7 +2,7 @@ name: Mobile E2E (Android)
 
 on:
   push:
-    branches: [ main, feat/mobile-test-structure, criandoci ]
+    branches: [ main, ci-setup ]
   pull_request:
     branches: [ main ]
 
