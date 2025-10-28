@@ -16,7 +16,8 @@ env:
 jobs:
   android-e2e:
     name: E2E on Android (Appium + Emulator)
-    runs-on: macos-latest
+    # 👉 Intel runner (emulador muito mais estável/rápido)
+    runs-on: macos-13
     timeout-minutes: 35
 
     steps:
@@ -37,25 +38,15 @@ jobs:
           npm i -D appium@^3 --no-audit --no-fund
           npx appium -v
 
-      # ====== FIX AQUI: step idempotente que não falha se já instalado ======
+      # Step idempotente: garante uiautomator2 sem quebrar se já existir
       - name: Ensure uiautomator2 driver (idempotent)
         shell: bash
         run: |
           set -euo pipefail
-
-          echo "== Drivers (antes) =="
-          npx appium driver list --installed || true
-
-          echo "== Tentando atualizar uiautomator2 =="
+          echo "== Drivers (antes) ==" && npx appium driver list --installed || true
           npx appium driver update uiautomator2 || true
-
-          echo "== Garantindo instalação (reinstala se preciso) =="
-          # --force força reinstalação se necessário; '|| true' evita quebrar em 'already installed'
           npx appium driver install --force uiautomator2 || true
-
-          echo "== Drivers (depois) =="
-          npx appium driver list --installed || true
-      # ======================================================================
+          echo "== Drivers (depois) ==" && npx appium driver list --installed || true
 
       - name: Setup Java for Android tooling
         uses: actions/setup-java@v4
@@ -67,15 +58,22 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
-          arch: x86_64
           target: google_apis
+          arch: x86_64
           profile: pixel_5
+          avd-name: e2e-avd
+          force-avd-creation: true
           disable-animations: true
-          emulator-options: "-no-snapshot -no-boot-anim -noaudio"
+          # 👉 Cold boot, sem snapshot/áudio/câmeras; GPU host (Intel) e timeout maior
+          emulator-boot-timeout: 1200
+          emulator-options: >
+            -no-snapshot -wipe-data -no-boot-anim -noaudio
+            -camera-back none -camera-front none
+            -gpu host -netfast -timezone UTC
           script: |
             set -euo pipefail
 
-            echo "▶ Iniciando Appium…"
+            echo "▶ Iniciando Appium em background…"
             npx appium --base-path / --port "$APPIUM_PORT" --log-level warn & APPIUM_PID=$!
 
             echo "▶ Aguardando Appium responder…"
