@@ -39,28 +39,42 @@ jobs:
           npx appium -v
 
       # uiautomator2: instala/atualiza sem falhar se já estiver ok
-      - name: Ensure uiautomator2 driver (install or update)
+            - name: Ensure uiautomator2 driver (install or install-if-missing)
         shell: bash
         run: |
           set -euo pipefail
 
-          echo "== Listing installed drivers (raw) =="
+          echo "== Appium drivers (antes) =="
           npx appium driver list --installed || true
 
-          echo "== Checking for uiautomator2 presence =="
-          # remove possíveis códigos ANSI e procure por uiautomator2 com ou sem @versão
-          if npx appium driver list --installed \
-              | sed 's/\x1b\[[0-9;]*m//g' \
-              | grep -Eq '^uiautomator2(@|\s|$)'; then
-            echo "uiautomator2 já instalado — tentando atualizar (não falha se não houver mudanças)"
-            npx appium driver update uiautomator2 || echo "update sem mudanças (ok)"
+          echo "== Tentando atualizar uiautomator2 =="
+          set +e
+          npx appium driver update uiautomator2
+          RC=$?
+          set -e
+
+          if [ $RC -ne 0 ]; then
+            echo "Update falhou (provavelmente não instalado). Tentando instalar…"
+            set +e
+            OUT="$(npx appium driver install uiautomator2 2>&1)"
+            RC=$?
+            set -e
+            echo "$OUT"
+            if [ $RC -ne 0 ]; then
+              # Se o erro for "already installed", seguimos em frente
+              if echo "$OUT" | grep -qi "already installed"; then
+                echo "uiautomator2 já estava instalado — OK"
+              else
+                echo "Falha instalando uiautomator2"; exit $RC
+              fi
+            fi
           else
-            echo "uiautomator2 não encontrado — instalando (idempotente)"
-            npx appium driver install uiautomator2 || echo "já estava instalado (ok)"
+            echo "uiautomator2 atualizado (ou já estava na última versão) — OK"
           fi
 
-          echo "=== Drivers instalados (final) ==="
+          echo "== Appium drivers (depois) =="
           npx appium driver list --installed || true
+
 
       - name: Setup Java for Android tooling
         uses: actions/setup-java@v4
