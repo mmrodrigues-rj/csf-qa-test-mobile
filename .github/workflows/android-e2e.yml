@@ -32,21 +32,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Appium 3 + uiautomator2 (idempotente)
-      - name: Install Appium 3
+      # Appium 3 + uiautomator2
+      - name: Install Appium + Android driver
         run: |
           npm i -D appium@^3 --no-audit --no-fund
           npx appium -v
-
-      - name: Ensure uiautomator2 driver (idempotent)
-        shell: bash
-        run: |
-          set -e
-          if npx appium driver list --installed | grep -E '^uiautomator2(\s|$)'; then
-            echo "uiautomator2 já instalado — ok"
-          else
-            npx appium driver install uiautomator2
-          fi
+          npx appium driver install uiautomator2 || npx appium driver update uiautomator2
           echo "=== Drivers instalados ==="
           npx appium driver list --installed
 
