@@ -1,6 +1,125 @@
+name: Android E2E
+
 on:
   push:
-    branches: [ main ]
+    branches: [ main, ci-setup, feat/* ]
   pull_request:
     branches: [ main ]
-  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ANDROID_APP_PATH: apps/android/native-demo-app.apk
+  APPIUM_PORT: 4723
+
+jobs:
+  android-e2e:
+    name: E2E on Android (Appium + Emulator)
+    runs-on: macos-13        # <-- Intel (x86_64). Evita device offline em ARM64.
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Appium 3 + uiautomator2
+      - name: Install Appium + Android driver
+        run: |
+          npm i -D appium@^3 --no-audit --no-fund
+          npx appium -v
+          npx appium driver install uiautomator2 || npx appium driver update uiautomator2
+          echo "=== Drivers instalados ==="
+          npx appium driver list --installed
+
+      - name: Setup Java for Android tooling
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # Emulador + testes
+      - name: Run Android emulator and E2E tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64                # casa com macos-13 (Intel)
+          profile: pixel_5
+          disable-animations: true
+          # Mais tolerante a boot: sem snapshot, sem boot anim, sem câmeras, GPU software
+          emulator-options: >
+            -no-snapshot -no-boot-anim -camera-back none -camera-front none
+            -gpu swiftshader_indirect -memory 4096
+          # Aumenta janela de boot (padrão é 600s). Aqui 900s.
+          emulator-boot-timeout: 900
+          script: |
+            set -euo pipefail
+
+            echo "▶ Verificando adb e aguardando device..."
+            adb start-server
+            # aguarda qualquer device aparecer
+            timeout 120 adb wait-for-device || true
+
+            echo "▶ Iniciando Appium em background…"
+            npx appium --base-path / --port $APPIUM_PORT --log-level warn & APPIUM_PID=$!
+
+            echo "▶ Aguardando Appium responder…"
+            for i in {1..60}; do
+              if curl -s "http://127.0.0.1:${APPIUM_PORT}/status" | grep -q "\"ready\":true"; then
+                echo "Appium OK"
+                break
+              fi
+              sleep 2
+              if [ $i -eq 60 ]; then
+                echo "Appium não iniciou a tempo"; kill $APPIUM_PID || true; exit 1
+              fi
+            done
+
+            echo "▶ Aguardando boot completo do emulador…"
+            # polling robusto do sys.boot_completed
+            for i in {1..180}; do
+              BOOT_OK=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+              if [ "$BOOT_OK" = "1" ]; then
+                echo "Emulador pronto."
+                break
+              fi
+              echo "Aguardando boot ($i/180)…"
+              sleep 3
+              if [ $i -eq 180 ]; then
+                echo "Timeout aguardando boot do emulador."
+                kill $APPIUM_PID || true
+                exit 1
+              fi
+            done
+
+            echo "▶ Executando testes E2E (Android)…"
+            export PLATFORM=android
+            export ANDROID_APP="$ANDROID_APP_PATH"
+            # seu script npm que dispara o wdio
+            npm run test:android || TEST_STATUS=$?
+
+            echo "▶ Encerrando Appium…"
+            kill $APPIUM_PID || true
+
+            exit ${TEST_STATUS:-0}
+
+      - name: Upload artifacts (if present)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts-android
+          path: |
+            reports/**
+            logs/**
+            **/wdio-*.log
+          if-no-files-found: ignore

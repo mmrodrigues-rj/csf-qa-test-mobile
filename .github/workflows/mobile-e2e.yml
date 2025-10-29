@@ -1,79 +1,50 @@
-name: Android E2E (Appium + WDIO)
+name: Mobile E2E (Android)
 
 on:
   push:
-    branches: [ main ]
-    paths:
-      - "tests/**"
-      - "wdio.conf.ts"
-      - "package.json"
-      - ".github/workflows/mobile-e2e.yml"
+    branches: [ main, ci-setup ]
   pull_request:
     branches: [ main ]
-    paths:
-      - "tests/**"
-      - "wdio.conf.ts"
-      - "package.json"
 
 jobs:
   android-e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: macos-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-
-      - name: Setup Java (JDK 17)
-        uses: actions/setup-java@v4
-        with:
-          distribution: "temurin"
-          java-version: "17"
+          node-version: '20'
+          cache: 'npm'
 
       - name: Install deps
+        run: npm ci
+
+      # Garante Appium + driver UIAutomator2 disponíveis no runner
+      - name: Install Appium + Android driver
         run: |
-          npm ci
+          npx appium -v || npm i -D appium
           npx appium driver install uiautomator2
 
-      - name: Start Appium (bg)
+      # Sobe Appium em background
+      - name: Start Appium
         run: |
-          npx appium --base-path /wd/hub --log-level error &
-          echo $! > appium.pid
-          sleep 3
+          npx appium --base-path /wd/hub --log-level info &
+          sleep 5
 
-      - name: Run tests on Android emulator
+      # Cria e executa emulador Android e roda os testes dentro dele
+      - name: Run Android emulator and tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
+          target: google_apis
           arch: x86_64
-          profile: Pixel 5
-          headless: true
-          disable-animations: true
+          profile: pixel_5
+          emulator-options: "-no-window -no-snapshot -noaudio -gpu swiftshader_indirect"
           script: |
             adb devices
-            # opcional: garanta permissões ao APK se necessário
-            # adb shell pm grant com.wdiodemoapp android.permission.POST_NOTIFICATIONS || true
-
-            # Rodagem mais estável no CI
-            npm run test:android -- --maxWorkers=1
-
-      - name: Upload WDIO reports (sempre)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: wdio-reports
-          path: |
-            reports/**
-            ./**/wdio-*.log
-            ./**/junit-*.xml
-          if-no-files-found: ignore
-
-      - name: Stop Appium
-        if: always()
-        run: |
-          if [ -f appium.pid ]; then kill $(cat appium.pid) || true; fi
+            echo "PLATFORM=android" >> $GITHUB_ENV
+            npm run test:android:ci
