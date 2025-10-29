@@ -106,8 +106,8 @@ jobs:
             echo "▶ Executando testes E2E (Android)…"
             export PLATFORM=android
             export ANDROID_APP="$ANDROID_APP_PATH"
-            # seu script npm que dispara o wdio
-            npm run test:android || TEST_STATUS=$?
+            # Temporário: apenas smoke test para validar workflow
+            npx wdio run ./wdio.conf.ts --spec ./tests/specs/00-smoke.install.spec.ts || TEST_STATUS=$?
 
             echo "▶ Encerrando Appium…"
             kill $APPIUM_PID || true
