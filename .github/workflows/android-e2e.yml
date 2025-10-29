@@ -63,6 +63,7 @@ jobs:
           # Aumenta janela de boot (padrão é 600s). Aqui 900s.
           emulator-boot-timeout: 900
           script: |
+            #!/bin/bash
             set -euo pipefail
 
             echo "▶ Verificando adb e aguardando device..."
