@@ -119,13 +119,25 @@ jobs:
 
             exit ${TEST_STATUS:-0}
 
-      - name: Upload artifacts (if present)
+      # Upload allure-results sempre (sucesso ou falha)
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-android
+          path: allure-results/
+          if-no-files-found: warn
+          retention-days: 30
+
+      # Upload outros artifacts apenas em falha
+      - name: Upload artifacts on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-artifacts-android
+          name: e2e-artifacts-android-failure
           path: |
             reports/**
             logs/**
             **/wdio-*.log
           if-no-files-found: ignore
+          retention-days: 7

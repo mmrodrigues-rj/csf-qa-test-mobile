@@ -140,5 +140,6 @@ vite.config.ts.timestamp-*
 
 # Test artifacts
 allure-results/
+!allure-results/categories.json
 reports/
 reports/allure-results/
