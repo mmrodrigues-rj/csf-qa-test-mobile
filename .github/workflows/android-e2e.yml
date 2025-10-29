@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [ main ]
 
+# Cancela runs anteriores do mesmo workflow na mesma branch/PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
