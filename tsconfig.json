@@ -8,8 +8,7 @@
       "node",
       "mocha",
       "@wdio/mocha-framework",
-      "@wdio/globals/types",
-      "webdriverio"
+      "@wdio/globals/types"
     ],
     "esModuleInterop": true,
     "resolveJsonModule": true,
