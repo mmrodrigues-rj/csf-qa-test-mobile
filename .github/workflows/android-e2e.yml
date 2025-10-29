@@ -70,51 +70,32 @@ jobs:
           script: |
             #!/bin/bash
             set -euo pipefail
-
-            echo "▶ Verificando adb e aguardando device..."
-            adb start-server
-            # aguarda qualquer device aparecer
-            timeout 120 adb wait-for-device || true
-
-            echo "▶ Iniciando Appium em background…"
+            
+            echo "▶ Emulador já pronto! Iniciando Appium..."
             npx appium --base-path / --port $APPIUM_PORT --log-level warn & APPIUM_PID=$!
-
-            echo "▶ Aguardando Appium responder…"
-            for i in {1..60}; do
-              if curl -s "http://127.0.0.1:${APPIUM_PORT}/status" | grep -q "\"ready\":true"; then
-                echo "Appium OK"
+            
+            echo "▶ Aguardando Appium iniciar..."
+            sleep 10
+            
+            # Verificar se Appium está respondendo
+            for i in {1..30}; do
+              if curl -sf "http://127.0.0.1:${APPIUM_PORT}/status" > /dev/null 2>&1; then
+                echo "✓ Appium OK"
                 break
               fi
+              echo "Aguardando Appium ($i/30)..."
               sleep 2
-              if [ $i -eq 60 ]; then
-                echo "Appium não iniciou a tempo"; kill $APPIUM_PID || true; exit 1
+              if [ $i -eq 30 ]; then
+                echo "❌ Appium não iniciou"; kill $APPIUM_PID || true; exit 1
               fi
             done
-
-            echo "▶ Aguardando boot completo do emulador…"
-            # polling robusto do sys.boot_completed
-            for i in {1..180}; do
-              BOOT_OK=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
-              if [ "$BOOT_OK" = "1" ]; then
-                echo "Emulador pronto."
-                break
-              fi
-              echo "Aguardando boot ($i/180)…"
-              sleep 3
-              if [ $i -eq 180 ]; then
-                echo "Timeout aguardando boot do emulador."
-                kill $APPIUM_PID || true
-                exit 1
-              fi
-            done
-
-            echo "▶ Executando testes E2E (Android)…"
+            
+            echo "▶ Executando testes E2E..."
             export PLATFORM=android
             export ANDROID_APP="$ANDROID_APP_PATH"
-            # Temporário: apenas smoke test para validar workflow
             npx wdio run ./wdio.conf.ts --spec ./tests/specs/00-smoke.install.spec.ts || TEST_STATUS=$?
-
-            echo "▶ Encerrando Appium…"
+            
+            echo "▶ Encerrando Appium..."
             kill $APPIUM_PID || true
 
             exit ${TEST_STATUS:-0}
