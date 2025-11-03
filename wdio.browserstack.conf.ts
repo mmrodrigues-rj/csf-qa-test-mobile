@@ -1,5 +1,8 @@
 // wdio.browserstack.conf.ts
-import { config as baseConfig } from './wdio.conf.js'
+import type { Options } from '@wdio/types'
+
+// Global browser instance from WebdriverIO
+declare const browser: WebdriverIO.Browser
 
 /**
  * BrowserStack credentials (from env)
@@ -80,8 +83,9 @@ function buildBrowserStackCaps() {
   ]
 }
 
-export const config: WebdriverIO.Config = {
-  ...baseConfig,
+export const config = {
+  // Runner
+  runner: 'local',
 
   // BrowserStack uses their own hostname and port
   hostname: 'hub-cloud.browserstack.com',
@@ -89,8 +93,39 @@ export const config: WebdriverIO.Config = {
   protocol: 'https',
   path: '/wd/hub',
 
-  // Override capabilities with BrowserStack config
+  // Specs
+  specs: [
+    './tests/specs/**/*.spec.ts'
+  ],
+  exclude: [],
+
+  // Capabilities with BrowserStack config
   capabilities: buildBrowserStackCaps(),
+
+  // Test settings
+  logLevel: 'info',
+  bail: 0,
+  baseUrl: '',
+  waitforTimeout: 10000,
+  connectionRetryTimeout: 180000,
+  connectionRetryCount: 3,
+  
+  // Framework
+  framework: 'mocha',
+  mochaOpts: {
+    ui: 'bdd',
+    timeout: 120000
+  },
+
+  // Reporters
+  reporters: [
+    'spec',
+    ['allure', {
+      outputDir: 'allure-results',
+      disableWebdriverStepsReporting: true,
+      disableWebdriverScreenshotsReporting: false,
+    }]
+  ],
 
   // Services
   services: [
@@ -105,24 +140,24 @@ export const config: WebdriverIO.Config = {
     ]
   ],
 
-  // Increase timeouts for BrowserStack
-  connectionRetryTimeout: 180000,
-  connectionRetryCount: 3,
-
-  // BrowserStack specific hooks
-  before: function (capabilities, specs) {
+  // Hooks
+  before: function () {
     console.log('🚀 Starting BrowserStack session...')
     console.log('Platform:', PLATFORM)
     console.log('Build:', BUILD_NAME)
   },
 
-  afterTest: async function(test, context, { error, result, duration, passed, retries }) {
+  afterTest: async function(_test: any, _context: any, { passed }: { passed: boolean }) {
     if (!passed) {
-      await browser.takeScreenshot()
+      try {
+        await (browser as any).takeScreenshot()
+      } catch (e) {
+        console.warn('Failed to take screenshot:', e)
+      }
     }
   },
 
-  after: function (result, capabilities, specs) {
+  after: function () {
     console.log('✅ BrowserStack session completed')
   },
-} as WebdriverIO.Config
+} as unknown as Options.Testrunner
