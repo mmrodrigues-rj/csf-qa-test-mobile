@@ -1,10 +1,12 @@
-name: Android E2E
+name: Android E2E (Emulator)
 
 on:
-  push:
-    branches: [ main, ci-setup, feat/* ]
-  pull_request:
-    branches: [ main ]
+  # Desabilitado temporariamente - usando BrowserStack
+  # push:
+  #   branches: [ main, ci-setup, feat/* ]
+  # pull_request:
+  #   branches: [ main ]
+  workflow_dispatch:  # Apenas manual
 
 # Cancela runs anteriores do mesmo workflow na mesma branch/PR
 concurrency:
