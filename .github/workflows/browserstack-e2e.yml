@@ -38,34 +38,37 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Resolve BrowserStack app url (use secret or upload APK)
+      - name: Upload APK to BrowserStack with stable custom_id
         shell: bash
         run: |
           set -euo pipefail
-          app_url="${BROWSERSTACK_ANDROID_APP_URL:-}"
-
+          CUSTOM_ID="wdio-native-demo-android-v1_0_8"
+          
+          echo "Uploading APK from ${APK_URL} with custom_id=${CUSTOM_ID}..."
+          # Upload via public URL to BrowserStack App Automate with custom_id
+          upload_resp=$(curl -sS -u "${BROWSERSTACK_USERNAME}:${BROWSERSTACK_ACCESS_KEY}" \
+            -X POST "https://api-cloud.browserstack.com/app-automate/upload" \
+            -F "url=${APK_URL}" \
+            -F "custom_id=${CUSTOM_ID}")
+          
+          echo "Upload response (credentials masked):"
+          echo "${upload_resp}" | jq '.' 2>/dev/null || echo "${upload_resp}"
+          
+          # Parse app_url using jq (available in ubuntu-latest)
+          app_url=$(echo "${upload_resp}" | jq -r '.app_url // empty' 2>/dev/null || echo "")
+          
           if [[ -z "${app_url}" ]]; then
-            echo "No BROWSERSTACK_ANDROID_APP_URL provided. Uploading APK from ${APK_URL}..."
-            # Upload via public URL to BrowserStack App Automate
-            upload_resp=$(curl -sS -u "${BROWSERSTACK_USERNAME}:${BROWSERSTACK_ACCESS_KEY}" -X POST "https://api-cloud.browserstack.com/app-automate/upload" -F "url=${APK_URL}")
-            echo "Upload response: ${upload_resp}" | sed 's/\(access_key\":\")\([^"]*\)\("\)/\1***\3/g' || true
-            # Parse app_url using Node (available after setup-node)
-            app_url=$(node -e "process.stdin.resume();let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write(j.app_url||'');}catch(e){}});") <<< "${upload_resp}"
-          fi
-
-          if [[ -z "${app_url}" ]]; then
-            echo "Failed to resolve a BrowserStack app URL (bs://...)." >&2
+            echo "Failed to extract app_url from upload response. Check if upload succeeded." >&2
             exit 1
           fi
-
-          # Validate bs:// format (allow custom_id patterns)
+          
+          # Validate bs:// format
           if [[ ! "${app_url}" =~ ^bs://[a-zA-Z0-9._-]+$ ]]; then
             echo "Resolved app URL appears invalid: ${app_url}" >&2
-            echo "Expected bs://<id or custom_id>. Tip: use custom_id or copy the exact app_url returned by the upload API." >&2
             exit 1
           fi
-
-          echo "Using BrowserStack app id ending with: ...${app_url: -6}"
+          
+          echo "✓ App uploaded successfully: ${app_url}"
           echo "BROWSERSTACK_APP_URL=${app_url}" >> "$GITHUB_ENV"
 
       - name: Run WDIO suite (Android)
