@@ -43,6 +43,13 @@ jobs:
             echo "BROWSERSTACK_ANDROID_APP_URL secret is required (bs://...)" >&2
             exit 1
           fi
+          # Basic sanity check of the bs:// format to fail fast with a clearer message
+          if [[ ! "${BROWSERSTACK_ANDROID_APP_URL}" =~ ^bs://[a-zA-Z0-9]+$ ]]; then
+            echo "BROWSERSTACK_ANDROID_APP_URL appears invalid. Expected format: bs://<alphanumeric-id>" >&2
+            echo "Tip: Re-upload your APK to BrowserStack App Automate and copy the 'App URL' (bs://...)." >&2
+            exit 1
+          fi
+          echo "Using BrowserStack app id ending with: ...${BROWSERSTACK_ANDROID_APP_URL: -6}"
           echo "BROWSERSTACK_APP_URL=${BROWSERSTACK_ANDROID_APP_URL}" >> "$GITHUB_ENV"
 
       - name: Run WDIO suite (Android)
