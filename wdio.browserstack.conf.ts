@@ -86,6 +86,9 @@ function buildBrowserStackCaps() {
 export const config = {
   // Runner
   runner: 'local',
+  // Limit parallel workers to avoid exceeding BrowserStack concurrency.
+  // You can override via env WORKERS, e.g., WORKERS=2
+  maxInstances: parseInt(process.env.WORKERS || '1', 10),
 
   // BrowserStack uses their own hostname and port
   hostname: 'hub-cloud.browserstack.com',
