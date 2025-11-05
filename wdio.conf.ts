@@ -12,7 +12,7 @@ const PLATFORM = (process.env.PLATFORM || 'android').toLowerCase()
  * Apps (podem ser sobrescritos por env)
  */
 const ANDROID_APP = process.env.ANDROID_APP || 'apps/android/native-demo-app.apk'
-const IOS_APP     = process.env.IOS_APP     || 'apps/ios/WdioDemoApp.app'
+const IOS_APP     = process.env.IOS_APP     || 'apps/ios/Payload/wdiodemoapp.app'
 
 /**
  * Porta/host do Appium (no CI iniciamos fora do WDIO)
