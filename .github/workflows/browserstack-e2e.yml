@@ -44,8 +44,8 @@ jobs:
             exit 1
           fi
           # Basic sanity check of the bs:// format to fail fast with a clearer message
-          if [[ ! "${BROWSERSTACK_ANDROID_APP_URL}" =~ ^bs://[a-zA-Z0-9]+$ ]]; then
-            echo "BROWSERSTACK_ANDROID_APP_URL appears invalid. Expected format: bs://<alphanumeric-id>" >&2
+          if [[ ! "${BROWSERSTACK_ANDROID_APP_URL}" =~ ^bs://[a-zA-Z0-9._-]+$ ]]; then
+            echo "BROWSERSTACK_ANDROID_APP_URL appears invalid. Expected format: bs://<id or custom_id> (alphanumeric, dot, underscore, hyphen)" >&2
             echo "Tip: Re-upload your APK to BrowserStack App Automate and copy the 'App URL' (bs://...)." >&2
             exit 1
           fi
