@@ -1,8 +1,8 @@
-name: iOS E2E
+name: iOS E2E [disabled]
 
 on:
-  # Temporariamente desabilitado - remova este comentário quando os testes iOS estiverem prontos
-  workflow_dispatch: {}  # Mantém apenas trigger manual para testes
+  # Temporariamente desabilitado: rodar apenas manualmente
+  workflow_dispatch:
 
 concurrency:
   group: ios-e2e-${{ github.ref }}

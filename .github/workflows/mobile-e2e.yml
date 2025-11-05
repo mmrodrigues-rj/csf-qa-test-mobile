@@ -1,8 +1,8 @@
-name: Mobile E2E (Android) - DEPRECATED
+name: Mobile E2E (Android) [disabled]
 
-# Workflow desabilitado - usar android-e2e.yml ao invés
 on:
-  workflow_dispatch:  # Apenas manual, não dispara automaticamente
+  # Temporariamente desabilitado: rodar apenas manualmente
+  workflow_dispatch:
 
 jobs:
   android-e2e:

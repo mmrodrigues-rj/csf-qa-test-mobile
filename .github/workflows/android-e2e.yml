@@ -1,17 +1,8 @@
-name: Android E2E (Emulator)
+name: Android E2E (Emulator) [disabled]
 
 on:
-  # Desabilitado temporariamente - usando BrowserStack
-  # push:
-  #   branches: [ main, ci-setup, feat/* ]
-  # pull_request:
-  #   branches: [ main ]
-  workflow_dispatch:  # Apenas manual
-
-# Cancela runs anteriores do mesmo workflow na mesma branch/PR
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Temporariamente desabilitado: rodar apenas manualmente
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -39,12 +30,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # Appium 3 + uiautomator2
-      - name: Install Appium + Android driver
+      # Appium 3 + uiautomator2 (idempotente)
+      - name: Install Appium 3
         run: |
           npm i -D appium@^3 --no-audit --no-fund
           npx appium -v
-          npx appium driver install uiautomator2 || npx appium driver update uiautomator2
+
+      - name: Ensure uiautomator2 driver (idempotent)
+        shell: bash
+        run: |
+          set -e
+          if npx appium driver list --installed | grep -E '^uiautomator2(\s|$)'; then
+            echo "uiautomator2 já instalado — ok"
+          else
+            npx appium driver install uiautomator2
+          fi
           echo "=== Drivers instalados ==="
           npx appium driver list --installed
 
@@ -70,34 +70,52 @@ jobs:
           # Aumenta janela de boot (padrão é 600s). Aqui 900s.
           emulator-boot-timeout: 900
           script: |
-            #!/bin/bash
             set -euo pipefail
-            
-            echo "▶ Emulador já pronto! Iniciando Appium..."
+
+            echo "▶ Verificando adb e aguardando device..."
+            adb start-server
+            # aguarda qualquer device aparecer
+            timeout 120 adb wait-for-device || true
+
+            echo "▶ Iniciando Appium em background…"
             npx appium --base-path / --port $APPIUM_PORT --log-level warn & APPIUM_PID=$!
-            
-            echo "▶ Aguardando Appium iniciar..."
-            sleep 10
-            
-            # Verificar se Appium está respondendo
-            for i in {1..30}; do
-              if curl -sf "http://127.0.0.1:${APPIUM_PORT}/status" > /dev/null 2>&1; then
-                echo "✓ Appium OK"
+
+            echo "▶ Aguardando Appium responder…"
+            for i in {1..60}; do
+              if curl -s "http://127.0.0.1:${APPIUM_PORT}/status" | grep -q "\"ready\":true"; then
+                echo "Appium OK"
                 break
               fi
-              echo "Aguardando Appium ($i/30)..."
               sleep 2
-              if [ $i -eq 30 ]; then
-                echo "❌ Appium não iniciou"; kill $APPIUM_PID || true; exit 1
+              if [ $i -eq 60 ]; then
+                echo "Appium não iniciou a tempo"; kill $APPIUM_PID || true; exit 1
               fi
             done
-            
-            echo "▶ Executando testes E2E..."
+
+            echo "▶ Aguardando boot completo do emulador…"
+            # polling robusto do sys.boot_completed
+            for i in {1..180}; do
+              BOOT_OK=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+              if [ "$BOOT_OK" = "1" ]; then
+                echo "Emulador pronto."
+                break
+              fi
+              echo "Aguardando boot ($i/180)…"
+              sleep 3
+              if [ $i -eq 180 ]; then
+                echo "Timeout aguardando boot do emulador."
+                kill $APPIUM_PID || true
+                exit 1
+              fi
+            done
+
+            echo "▶ Executando testes E2E (Android)…"
             export PLATFORM=android
             export ANDROID_APP="$ANDROID_APP_PATH"
-            npx wdio run ./wdio.conf.ts --spec ./tests/specs/00-smoke.install.spec.ts || TEST_STATUS=$?
-            
-            echo "▶ Encerrando Appium..."
+            # seu script npm que dispara o wdio
+            npm run test:android || TEST_STATUS=$?
+
+            echo "▶ Encerrando Appium…"
             kill $APPIUM_PID || true
 
             exit ${TEST_STATUS:-0}
