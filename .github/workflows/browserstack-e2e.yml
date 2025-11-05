@@ -23,6 +23,8 @@ jobs:
       # Optional build name override when triggering manually
       BROWSERSTACK_BUILD_NAME: ${{ github.workflow }} • ${{ github.ref_name }} • ${{ github.run_number }}
       BROWSERSTACK_PROJECT_NAME: CSF QA Test Mobile
+      # Fallback public APK URL to upload when no bs:// secret is set
+      APK_URL: https://github.com/webdriverio/native-demo-app/releases/download/v1.0.8/android.wdio.native.app.v1.0.8.apk
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,21 +38,35 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Export BrowserStack app url
+      - name: Resolve BrowserStack app url (use secret or upload APK)
         shell: bash
         run: |
-          if [[ -z "${BROWSERSTACK_ANDROID_APP_URL}" ]]; then
-            echo "BROWSERSTACK_ANDROID_APP_URL secret is required (bs://...)" >&2
+          set -euo pipefail
+          app_url="${BROWSERSTACK_ANDROID_APP_URL:-}"
+
+          if [[ -z "${app_url}" ]]; then
+            echo "No BROWSERSTACK_ANDROID_APP_URL provided. Uploading APK from ${APK_URL}..."
+            # Upload via public URL to BrowserStack App Automate
+            upload_resp=$(curl -sS -u "${BROWSERSTACK_USERNAME}:${BROWSERSTACK_ACCESS_KEY}" -X POST "https://api-cloud.browserstack.com/app-automate/upload" -F "url=${APK_URL}")
+            echo "Upload response: ${upload_resp}" | sed 's/\(access_key\":\")\([^"]*\)\("\)/\1***\3/g' || true
+            # Parse app_url using Node (available after setup-node)
+            app_url=$(node -e "process.stdin.resume();let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{try{const j=JSON.parse(d);process.stdout.write(j.app_url||'');}catch(e){}});") <<< "${upload_resp}"
+          fi
+
+          if [[ -z "${app_url}" ]]; then
+            echo "Failed to resolve a BrowserStack app URL (bs://...)." >&2
             exit 1
           fi
-          # Basic sanity check of the bs:// format to fail fast with a clearer message
-          if [[ ! "${BROWSERSTACK_ANDROID_APP_URL}" =~ ^bs://[a-zA-Z0-9._-]+$ ]]; then
-            echo "BROWSERSTACK_ANDROID_APP_URL appears invalid. Expected format: bs://<id or custom_id> (alphanumeric, dot, underscore, hyphen)" >&2
-            echo "Tip: Re-upload your APK to BrowserStack App Automate and copy the 'App URL' (bs://...)." >&2
+
+          # Validate bs:// format (allow custom_id patterns)
+          if [[ ! "${app_url}" =~ ^bs://[a-zA-Z0-9._-]+$ ]]; then
+            echo "Resolved app URL appears invalid: ${app_url}" >&2
+            echo "Expected bs://<id or custom_id>. Tip: use custom_id or copy the exact app_url returned by the upload API." >&2
             exit 1
           fi
-          echo "Using BrowserStack app id ending with: ...${BROWSERSTACK_ANDROID_APP_URL: -6}"
-          echo "BROWSERSTACK_APP_URL=${BROWSERSTACK_ANDROID_APP_URL}" >> "$GITHUB_ENV"
+
+          echo "Using BrowserStack app id ending with: ...${app_url: -6}"
+          echo "BROWSERSTACK_APP_URL=${app_url}" >> "$GITHUB_ENV"
 
       - name: Run WDIO suite (Android)
         run: npm run test:browserstack:android
