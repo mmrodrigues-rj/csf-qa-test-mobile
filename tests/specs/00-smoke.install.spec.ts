@@ -6,7 +6,12 @@ describe('Smoke | App launch', () => {
   it('abre a sessão do Appium e retorna pageSource', async () => {
     // Garante que a sessão está ativa (evita warnings e aquece capacidades)
     if (typeof (browser as any).getAppiumSessionCapabilities === 'function') {
-      await (browser as any).getAppiumSessionCapabilities();
+      try {
+        // Em alguns providers (ex.: BrowserStack) o endpoint /appium/capabilities não é suportado
+        await (browser as any).getAppiumSessionCapabilities();
+      } catch {
+        // Ignora silenciosamente quando o endpoint não existe
+      }
     }
 
     // Valida a sessão

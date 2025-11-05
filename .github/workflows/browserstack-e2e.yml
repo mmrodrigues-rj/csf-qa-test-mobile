@@ -1,0 +1,70 @@
+name: E2E (BrowserStack)
+
+on:
+	workflow_dispatch:
+	push:
+		branches: [ main ]
+		paths:
+			- 'tests/**'
+			- 'wdio*.ts'
+			- 'package.json'
+			- 'apps/**'
+			- '.github/workflows/browserstack-e2e.yml'
+	pull_request:
+		branches: [ main ]
+		paths:
+			- 'tests/**'
+			- 'wdio*.ts'
+			- 'package.json'
+			- 'apps/**'
+			- '.github/workflows/browserstack-e2e.yml'
+
+concurrency:
+	group: browserstack-e2e-${{ github.ref }}
+	cancel-in-progress: true
+
+jobs:
+	android:
+		name: Android
+		runs-on: ubuntu-latest
+		env:
+			PLATFORM: android
+			BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+			BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+			# Provide a bs://... url stored as a secret
+			BROWSERSTACK_ANDROID_APP_URL: ${{ secrets.BROWSERSTACK_ANDROID_APP_URL }}
+			# Optional build name override when triggering manually
+			BROWSERSTACK_BUILD_NAME: ${{ github.workflow }} • ${{ github.ref_name }} • ${{ github.run_number }}
+			BROWSERSTACK_PROJECT_NAME: CSF QA Test Mobile
+		steps:
+			- name: Checkout
+				uses: actions/checkout@v4
+
+					- name: Setup Node.js
+				uses: actions/setup-node@v4
+				with:
+					node-version: '20'
+							cache: 'npm'
+
+			- name: Install dependencies
+				run: npm ci
+
+			- name: Export BrowserStack app url
+				shell: bash
+				run: |
+					if [[ -z "${BROWSERSTACK_ANDROID_APP_URL}" ]]; then
+						echo "BROWSERSTACK_ANDROID_APP_URL secret is required (bs://...)" >&2
+						exit 1
+					fi
+					echo "BROWSERSTACK_APP_URL=${BROWSERSTACK_ANDROID_APP_URL}" >> "$GITHUB_ENV"
+
+					- name: Run WDIO suite (Android)
+				run: npm run test:browserstack:android
+
+			- name: Upload Allure results
+				if: always()
+				uses: actions/upload-artifact@v4
+				with:
+					name: allure-results-android
+					path: allure-results
+					if-no-files-found: ignore

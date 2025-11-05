@@ -68,7 +68,14 @@ class SignupScreen extends BaseScreen {
         { type: 'pointerUp', button: 1 }
       ]
     }]);
-    await d.releaseActions();
+    // Alguns providers (ex.: BrowserStack) não suportam DELETE /actions (releaseActions)
+    // o que dispara um erro "unknown command". Como o gesto já foi concluído com pointerUp,
+    // podemos ignorar falhas aqui com segurança.
+    try {
+      await d.releaseActions();
+    } catch {
+      // ignore
+    }
     await browser.pause(200);
   }
 

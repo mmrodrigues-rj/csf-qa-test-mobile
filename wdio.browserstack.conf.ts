@@ -93,6 +93,10 @@ export const config = {
   protocol: 'https',
   path: '/wd/hub',
 
+  // Auth for BrowserStack (required for session creation)
+  user: process.env.BROWSERSTACK_USERNAME,
+  key: process.env.BROWSERSTACK_ACCESS_KEY,
+
   // Specs
   specs: [
     './tests/specs/**/*.spec.ts'
