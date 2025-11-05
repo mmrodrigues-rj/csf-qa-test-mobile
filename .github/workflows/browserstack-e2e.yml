@@ -81,3 +81,85 @@ jobs:
           name: allure-results-android
           path: allure-results
           if-no-files-found: ignore
+
+  ios:
+    name: iOS
+    runs-on: ubuntu-latest
+    env:
+      PLATFORM: ios
+      BROWSERSTACK_USERNAME: ${{ secrets.BROWSERSTACK_USERNAME }}
+      BROWSERSTACK_ACCESS_KEY: ${{ secrets.BROWSERSTACK_ACCESS_KEY }}
+      # Provide a bs://... url stored as a secret
+      BROWSERSTACK_IOS_APP_URL: ${{ secrets.BROWSERSTACK_IOS_APP_URL }}
+      # Optional build name override when triggering manually
+      BROWSERSTACK_BUILD_NAME: ${{ github.workflow }} • ${{ github.ref_name }} • ${{ github.run_number }}
+      BROWSERSTACK_PROJECT_NAME: CSF QA Test Mobile
+      # Fallback public IPA URL to upload when no bs:// secret is set
+      IPA_URL: https://github.com/webdriverio/native-demo-app/releases/download/v1.0.8/ios.wdio.native.app.v1.0.8.zip
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prepare iOS .app for BrowserStack upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Creating iOS app zip from local Payload directory..."
+          cd apps/ios
+          # BrowserStack expects a .zip containing the .app folder structure
+          zip -r wdiodemoapp.zip Payload/
+          echo "✓ Created wdiodemoapp.zip"
+          cd ../..
+
+      - name: Upload iOS app to BrowserStack with stable custom_id
+        shell: bash
+        run: |
+          set -euo pipefail
+          CUSTOM_ID="wdio-native-demo-ios-v1_0_8"
+          
+          echo "Uploading iOS app with custom_id=${CUSTOM_ID}..."
+          # Upload local zip file to BrowserStack App Automate with custom_id
+          upload_resp=$(curl -sS -u "${BROWSERSTACK_USERNAME}:${BROWSERSTACK_ACCESS_KEY}" \
+            -X POST "https://api-cloud.browserstack.com/app-automate/upload" \
+            -F "file=@apps/ios/wdiodemoapp.zip" \
+            -F "custom_id=${CUSTOM_ID}")
+          
+          echo "Upload response (credentials masked):"
+          echo "${upload_resp}" | jq '.' 2>/dev/null || echo "${upload_resp}"
+          
+          # Parse app_url using jq (available in ubuntu-latest)
+          app_url=$(echo "${upload_resp}" | jq -r '.app_url // empty' 2>/dev/null || echo "")
+          
+          if [[ -z "${app_url}" ]]; then
+            echo "Failed to extract app_url from upload response. Check if upload succeeded." >&2
+            exit 1
+          fi
+          
+          # Validate bs:// format
+          if [[ ! "${app_url}" =~ ^bs://[a-zA-Z0-9._-]+$ ]]; then
+            echo "Resolved app URL appears invalid: ${app_url}" >&2
+            exit 1
+          fi
+          
+          echo "✓ App uploaded successfully: ${app_url}"
+          echo "BROWSERSTACK_APP_URL=${app_url}" >> "$GITHUB_ENV"
+
+      - name: Run WDIO suite (iOS)
+        run: npm run test:browserstack:ios
+
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results-ios
+          path: allure-results
+          if-no-files-found: ignore
