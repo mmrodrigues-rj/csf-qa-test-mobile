@@ -1,5 +1,5 @@
 // wdio.conf.ts
-// types from 'webdriverio' are available via tsconfig "types"
+import type { Options } from '@wdio/types'
 import { join } from 'path'
 
 /**
@@ -42,7 +42,7 @@ const LOG_LEVEL = (() => {
 /**
  * Capacidades de acordo com a plataforma
  */
-function buildCaps() {
+function buildCaps(): any[] {
   if (PLATFORM === 'ios') {
     return [
       {
@@ -181,6 +181,6 @@ export const config = {
       /* ignora */
     }
   }
-} as unknown as WebdriverIO.Config
+} as unknown as Options.Testrunner
 
 export default config
